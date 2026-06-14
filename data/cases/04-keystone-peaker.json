@@ -1,0 +1,17 @@
+{
+  "input": "Keystone Peaker (PJM queue AE2-099) was a proposed 120 MW natural gas peaking plant at the Conemaugh 500 kV switchyard. The interconnection request was withdrawn by the developer, Allegheny Energy Ventures, in 2025. A system impact study had estimated $9,250,000 in network upgrades.",
+  "expected": {
+    "project_name": "Keystone Peaker",
+    "developer": "Allegheny Energy Ventures",
+    "capacity_mw": 120,
+    "resource_type": "gas",
+    "voltage_kv": 500,
+    "point_of_interconnection": "Conemaugh 500 kV switchyard",
+    "queue_id": "AE2-099",
+    "iso_rto": "PJM",
+    "study_type": "system_impact",
+    "in_service_date": null,
+    "status": "withdrawn",
+    "network_upgrade_cost_usd": 9250000
+  }
+}

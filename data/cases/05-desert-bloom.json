@@ -1,0 +1,17 @@
+{
+  "input": "Desert Bloom is a 300 MW co-located solar-plus-storage (hybrid) project in the SPP footprint. The interconnection customer is listed as TBD. It is in service as of March 2024. Voltage and queue details were redacted in this public summary; no upgrade cost was disclosed.",
+  "expected": {
+    "project_name": "Desert Bloom",
+    "developer": null,
+    "capacity_mw": 300,
+    "resource_type": "hybrid",
+    "voltage_kv": null,
+    "point_of_interconnection": null,
+    "queue_id": null,
+    "iso_rto": "SPP",
+    "study_type": null,
+    "in_service_date": null,
+    "status": "in_service",
+    "network_upgrade_cost_usd": null
+  }
+}
