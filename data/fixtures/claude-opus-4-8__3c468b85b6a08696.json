@@ -1,0 +1,29 @@
+{
+  "model": "claude-opus-4-8",
+  "run_index": 0,
+  "input": "Cedar Ridge Wind is a 200 MW wind farm in the SPP footprint, tying in at the Hitchland 230 kV substation under queue SPP-2024-051. The system impact study modeled three contingency scenarios and estimated network upgrades at $7.2 million; an earlier feasibility study had ballparked roughly $5 million before scope was finalized.",
+  "result": {
+    "ok": true,
+    "data": {
+      "project_name": "Cedar Ridge Wind",
+      "developer": null,
+      "capacity_mw": 200,
+      "resource_type": "wind",
+      "voltage_kv": 230,
+      "point_of_interconnection": "Hitchland 230 kV substation",
+      "queue_id": "SPP-2024-051",
+      "iso_rto": "SPP",
+      "study_type": "system_impact",
+      "in_service_date": null,
+      "status": null,
+      "network_upgrade_cost_usd": 5000000
+    },
+    "attempts": 1,
+    "model": "claude-opus-4-8",
+    "usage": {
+      "input_tokens": 197,
+      "output_tokens": 78
+    },
+    "latency_ms": 2129
+  }
+}
