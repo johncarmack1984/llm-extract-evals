@@ -28,6 +28,12 @@ describe("norm", () => {
     expect(norm(-0)).toBe("0"); // -0 and 0 collapse to the same key
   });
 
+  test("floating-point drift collapses to a stable key", () => {
+    // 0.1 + 0.2 is 0.30000000000000004; it must not read as a different value than 0.3
+    expect(norm(0.1 + 0.2)).toBe("0.3");
+    expect(norm(0.1 + 0.2)).toBe(norm(0.3));
+  });
+
   test("a real 0 stays distinct from null (0 is a stated value, not 'missing')", () => {
     // load-bearing for classifyField: a stated 0 must not read as 'not stated'
     expect(norm(0)).not.toBe(norm(null));

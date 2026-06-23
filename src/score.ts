@@ -17,7 +17,13 @@ export type Tally = Record<Outcome, number>;
  */
 export function norm(v: unknown): string {
   if (v === null || v === undefined) return "null";
-  if (typeof v === "number") return String(v);
+  if (typeof v === "number") {
+    // Canonicalize to a fixed precision so two numbers that differ only in their
+    // floating-point representation (0.1 + 0.2 vs 0.3) share a key, while
+    // integers and simple decimals keep their natural form. Non-finite values
+    // (NaN/Infinity) pass through unchanged.
+    return Number.isFinite(v) ? String(parseFloat(v.toFixed(6))) : String(v);
+  }
   return String(v).trim().toLowerCase();
 }
 
