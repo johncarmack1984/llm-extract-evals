@@ -58,13 +58,21 @@ describe("parseArgs", () => {
 });
 
 describe("parseJsonl", () => {
-  test("parses one object per line, deriving a sequential id when absent", () => {
+  test("parses one object per line, deriving a line-based id when absent", () => {
     const { items, skipped } = parseJsonl('{"input":"a"}\n{"id":"x","text":"b"}\n');
     expect(skipped).toEqual([]);
     expect(items).toEqual([
-      { id: "1", input: "a" },
+      { id: "line-1", input: "a" },
       { id: "x", input: "b" },
     ]);
+  });
+
+  test("a derived id can't collide with an explicit sequential id elsewhere in the file", () => {
+    // {"id":"2"} then an id-less line previously both became "2"; now the id-less
+    // line is keyed by its line number, so output ids stay unique.
+    const { items } = parseJsonl('{"id":"2","input":"a"}\n{"input":"b"}\n');
+    expect(items.map((i) => i.id)).toEqual(["2", "line-2"]);
+    expect(new Set(items.map((i) => i.id)).size).toBe(items.length); // all ids distinct
   });
 
   test("ignores blank lines without counting them as malformed", () => {
@@ -81,7 +89,7 @@ describe("parseJsonl", () => {
 
   test("falls back from input to text", () => {
     const { items } = parseJsonl('{"text":"hello"}');
-    expect(items[0]).toEqual({ id: "1", input: "hello" });
+    expect(items[0]).toEqual({ id: "line-1", input: "hello" });
   });
 });
 
@@ -105,6 +113,22 @@ describe("mapPool", () => {
       inFlight--;
     });
     expect(peak).toBeLessThanOrEqual(2);
+  });
+
+  test("a limit of 0 still runs every item (no silent un-run holes)", async () => {
+    // a computed limit of 0 must not spawn zero workers and return an array of holes
+    const out = await mapPool([1, 2, 3], 0, async (x) => x * 2);
+    expect(out).toEqual([2, 4, 6]);
+  });
+
+  test("an empty input returns an empty result", async () => {
+    let called = false;
+    const out = await mapPool([], 4, async () => {
+      called = true;
+      return 1;
+    });
+    expect(out).toEqual([]);
+    expect(called).toBe(false);
   });
 });
 
