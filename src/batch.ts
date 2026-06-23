@@ -117,7 +117,7 @@ export function parseJsonl(text: string): { items: Item[]; skipped: number[] } {
   return { items, skipped };
 }
 
-function loadItems(path: string): Item[] {
+export function loadItems(path: string): Item[] {
   if (!existsSync(path)) throw new Error(`no such file or directory: ${path}`);
   if (statSync(path).isDirectory()) {
     return readdirSync(path)
