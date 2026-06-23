@@ -69,6 +69,7 @@ The eval is non-deterministic and costs money if it calls the model every run --
 
 - By default, `bun run eval` replays committed fixtures keyed by `(model, run-index, input)` -- no API key, no network, no spend, identical numbers every time.
 - `RECORD=1 bun run eval` calls the live model and overwrites the fixtures for the current `MODEL`, capturing real responses (including usage and latency).
+- `REPLAY_ONLY=1 bun run eval` turns a missing fixture into a hard error instead of a silent fall-through to a billed live call -- a guard for runs (and CI) you intend to keep offline and free.
 - CI (`.github/workflows/ci.yml`) runs typecheck + unit tests + the replayed eval on every push, with no secret required.
 
 ## The harder cases

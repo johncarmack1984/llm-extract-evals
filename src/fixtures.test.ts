@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { fixtureKey, fixturePath, FIXTURES_DIR } from "./fixtures";
+import { cachedExtract, fixtureKey, fixturePath, FIXTURES_DIR } from "./fixtures";
 
 // fixtureKey is the cache key the whole offline replay path depends on
 // (cachedExtract does existsSync(fixturePath(...))). If its derivation drifts,
@@ -47,5 +47,28 @@ describe("fixturePath", () => {
     const p = fixturePath("claude-opus-4-8", "doc", 0);
     expect(p.startsWith(FIXTURES_DIR)).toBe(true);
     expect(p.endsWith("claude-opus-4-8__af70cc638ec172b3.json")).toBe(true);
+  });
+});
+
+describe("cachedExtract REPLAY_ONLY guard", () => {
+  test("a cache miss throws instead of calling the live model when REPLAY_ONLY is set", async () => {
+    // The throw must happen before extract() is reached, so this never spends.
+    // The unique input + run index guarantees no fixture exists; the key is
+    // also cleared as a backstop in case the guard ever regressed.
+    const prevReplay = process.env.REPLAY_ONLY;
+    const prevKey = process.env.ANTHROPIC_API_KEY;
+    process.env.REPLAY_ONLY = "1";
+    delete process.env.ANTHROPIC_API_KEY;
+    let error: unknown;
+    try {
+      await cachedExtract("uncached REPLAY_ONLY probe input, no fixture exists", 424242);
+    } catch (e) {
+      error = e;
+    } finally {
+      if (prevReplay === undefined) delete process.env.REPLAY_ONLY;
+      else process.env.REPLAY_ONLY = prevReplay;
+      if (prevKey !== undefined) process.env.ANTHROPIC_API_KEY = prevKey;
+    }
+    expect(String(error)).toMatch(/REPLAY_ONLY/);
   });
 });
