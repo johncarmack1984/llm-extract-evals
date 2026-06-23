@@ -95,6 +95,10 @@ export function parseArgs(argv: string[]): BatchArgs {
  * Parse JSONL text into items, skipping malformed lines instead of aborting the
  * whole run. Returns the parsed items plus the 1-based line numbers skipped, so
  * the caller can report them. Blank lines are ignored (not counted as skipped).
+ *
+ * A row without an `id` derives one from its line number (`line-<n>`) rather than
+ * a running counter, so a derived id can't collide with an explicit sequential
+ * id (`"1"`, `"2"`, ...) elsewhere in the file.
  */
 export function parseJsonl(text: string): { items: Item[]; skipped: number[] } {
   const items: Item[] = [];
@@ -105,7 +109,7 @@ export function parseJsonl(text: string): { items: Item[]; skipped: number[] } {
     if (!line) continue;
     try {
       const row = JSON.parse(line);
-      items.push({ id: String(row.id ?? items.length + 1), input: String(row.input ?? row.text ?? "") });
+      items.push({ id: String(row.id ?? `line-${i + 1}`), input: String(row.input ?? row.text ?? "") });
     } catch {
       skipped.push(i + 1);
     }
@@ -138,7 +142,10 @@ export async function mapPool<T, R>(items: T[], limit: number, fn: (item: T, i: 
       results[i] = await fn(items[i]!, i);
     }
   };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  // At least one worker whenever there's work: a caller-supplied limit of 0 must
+  // not silently spawn zero workers and return an array of un-run holes.
+  const workers = Math.min(Math.max(1, limit), items.length);
+  await Promise.all(Array.from({ length: workers }, worker));
   return results;
 }
 
