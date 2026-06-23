@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { cachedExtract, fixtureKey, fixturePath, FIXTURES_DIR } from "./fixtures";
 
 // fixtureKey is the cache key the whole offline replay path depends on
@@ -57,8 +59,10 @@ describe("cachedExtract REPLAY_ONLY guard", () => {
     // also cleared as a backstop in case the guard ever regressed.
     const prevReplay = process.env.REPLAY_ONLY;
     const prevKey = process.env.ANTHROPIC_API_KEY;
+    const prevRecord = process.env.RECORD;
     process.env.REPLAY_ONLY = "1";
-    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.RECORD; // a stray RECORD=1 would bypass the guard; pin it off
+    delete process.env.ANTHROPIC_API_KEY; // backstop: no spend even if the guard regressed
     let error: unknown;
     try {
       await cachedExtract("uncached REPLAY_ONLY probe input, no fixture exists", 424242);
@@ -67,8 +71,31 @@ describe("cachedExtract REPLAY_ONLY guard", () => {
     } finally {
       if (prevReplay === undefined) delete process.env.REPLAY_ONLY;
       else process.env.REPLAY_ONLY = prevReplay;
+      if (prevRecord !== undefined) process.env.RECORD = prevRecord;
       if (prevKey !== undefined) process.env.ANTHROPIC_API_KEY = prevKey;
     }
     expect(String(error)).toMatch(/REPLAY_ONLY/);
+  });
+});
+
+describe("cachedExtract replay", () => {
+  // Exercise the CI-critical offline path against a real committed fixture: with
+  // RECORD off and no key, a present fixture must replay -- never call the model.
+  const fixtureFile = readdirSync(FIXTURES_DIR).find((f) => f.endsWith(".json"))!;
+  const fx = JSON.parse(readFileSync(join(FIXTURES_DIR, fixtureFile), "utf8"));
+
+  test("a committed fixture replays offline and returns the recorded result verbatim", async () => {
+    const prevRecord = process.env.RECORD;
+    const prevKey = process.env.ANTHROPIC_API_KEY;
+    delete process.env.RECORD; // force the replay path, not a re-record
+    delete process.env.ANTHROPIC_API_KEY; // backstop: no spend even on an unexpected miss
+    try {
+      const { result, source } = await cachedExtract(fx.input, fx.run_index);
+      expect(source).toBe("replay");
+      expect(result).toEqual(fx.result); // recorded result, not a live call
+    } finally {
+      if (prevRecord !== undefined) process.env.RECORD = prevRecord;
+      if (prevKey !== undefined) process.env.ANTHROPIC_API_KEY = prevKey;
+    }
   });
 });
