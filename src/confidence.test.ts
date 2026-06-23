@@ -47,4 +47,42 @@ describe("tallyConfidence", () => {
     expect(data.network_upgrade_cost_usd).toBeNull(); // 2 of 3 say not-stated
     expect(confidence.network_upgrade_cost_usd).toBeCloseTo(0.667, 2);
   });
+
+  test("a value-vs-null tie resolves to null regardless of run order (safe consensus)", () => {
+    // a 1-1 deadlock between a stated value and 'not stated' must not coin-flip
+    // to the value -- trusting an invented number is the unsafe error here.
+    const forward = tallyConfidence([rec({ network_upgrade_cost_usd: 5_000_000 }), rec({ network_upgrade_cost_usd: null })], 0.67);
+    const reverse = tallyConfidence([rec({ network_upgrade_cost_usd: null }), rec({ network_upgrade_cost_usd: 5_000_000 })], 0.67);
+    expect(forward.data.network_upgrade_cost_usd).toBeNull();
+    expect(reverse.data.network_upgrade_cost_usd).toBeNull();
+    expect(forward.confidence.network_upgrade_cost_usd).toBe(0.5);
+    expect(forward.low_confidence).toContain("network_upgrade_cost_usd"); // 0.5 < 0.67
+  });
+
+  test("a tie between two stated values stays deterministic (first-seen, no null bias)", () => {
+    // no null in the tie, so the safety bias doesn't apply; the result is stable
+    const { data, low_confidence } = tallyConfidence([rec({ iso_rto: "ERCOT" }), rec({ iso_rto: "PJM" })], 0.67);
+    expect(data.iso_rto).toBe("ERCOT");
+    expect(low_confidence).toContain("iso_rto"); // still low confidence at 0.5
+  });
+
+  test("a field absent from every sample is unanimous null, not flagged", () => {
+    // missing -> norm 'null' for every run -> confidence 1.0, normalized to literal null
+    const { data, confidence, low_confidence } = tallyConfidence([rec({ capacity_mw: 250 }), rec({ capacity_mw: 250 })], 0.67);
+    expect(data.developer).toBeNull();
+    expect(confidence.developer).toBe(1);
+    expect(low_confidence).not.toContain("developer");
+  });
+
+  test("a single sample yields confidence 1.0 for every field, nothing flagged", () => {
+    const { confidence, low_confidence } = tallyConfidence([rec({ capacity_mw: 250 })], 0.67);
+    expect(confidence.capacity_mw).toBe(1);
+    expect(low_confidence).toEqual([]);
+  });
+
+  test("threshold is an exclusive floor: confidence == threshold is not flagged", () => {
+    // 1 of 2 = 0.5 at threshold 0.5 stays off the review queue (strict <)
+    const { low_confidence } = tallyConfidence([rec({ status: "active" }), rec({ status: "withdrawn" })], 0.5);
+    expect(low_confidence).not.toContain("status");
+  });
 });
