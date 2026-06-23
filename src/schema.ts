@@ -35,6 +35,7 @@ export const InterconnectionStudy = z.object({
     .describe("Interconnection study phase."),
   in_service_date: z
     .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "ISO 8601 date, YYYY-MM-DD")
     .nullable()
     .describe("In-service date as ISO 8601 (YYYY-MM-DD). Use null if only a month or year is given."),
   status: z
