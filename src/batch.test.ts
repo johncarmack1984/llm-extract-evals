@@ -1,5 +1,8 @@
-import { describe, expect, test } from "bun:test";
-import { parseArgs, parseJsonl, mapPool, extractItem } from "./batch";
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { parseArgs, parseJsonl, mapPool, extractItem, loadItems } from "./batch";
 import type { InterconnectionStudy } from "./schema";
 
 const rec = (o: Record<string, unknown>) => o as unknown as InterconnectionStudy;
@@ -174,5 +177,29 @@ describe("extractItem", () => {
     };
     const out = await extractItem(item, { confidence: 3, threshold: 0.67 }, deps);
     expect(out).toMatchObject({ id: "doc-1", ok: true, confidence: { project_name: 1 }, low_confidence: ["capacity_mw"] });
+  });
+});
+
+describe("loadItems", () => {
+  const dir = mkdtempSync(join(tmpdir(), "loaditems-"));
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  test("directory mode reads only .txt/.md, sorted, id = filename", () => {
+    writeFileSync(join(dir, "b.txt"), "B");
+    writeFileSync(join(dir, "a.md"), "A");
+    writeFileSync(join(dir, "skip.json"), "{}"); // not a document type -> excluded
+    const items = loadItems(dir);
+    expect(items.map((i) => i.id)).toEqual(["a.md", "b.txt"]);
+    expect(items.find((i) => i.id === "a.md")!.input).toBe("A");
+  });
+
+  test("file mode parses JSONL (one record per line)", () => {
+    const f = join(dir, "in.jsonl");
+    writeFileSync(f, '{"id":"x","input":"hi"}\n');
+    expect(loadItems(f)).toEqual([{ id: "x", input: "hi" }]);
+  });
+
+  test("a missing path throws a clear error, not an opaque ENOENT downstream", () => {
+    expect(() => loadItems(join(dir, "nope"))).toThrow(/no such file or directory/);
   });
 });
