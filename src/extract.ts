@@ -32,9 +32,13 @@ export type ExtractResult =
 
 /**
  * Extract one document into the schema. Structured outputs constrain the
- * response to the schema; on a schema miss we retry (transient), and a refusal
- * is terminal (a retry will not change it). On success we also surface token
- * usage and wall-clock latency so the eval/batch can report cost and timing.
+ * response to the schema; a schema miss is the one failure we retry here,
+ * because the SDK can't see it. Transient HTTP failures (429/5xx/connection)
+ * are already retried with backoff inside the SDK, and a refusal or a terminal
+ * error fails fast -- so this loop does not re-issue those, which would only
+ * stack a second round of attempts on top of the SDK's and multiply spend. On
+ * success we also surface token usage and wall-clock latency so the eval/batch
+ * can report cost and timing.
  */
 export async function extract(docText: string): Promise<ExtractResult> {
   let lastError = "unknown error";
@@ -65,19 +69,14 @@ export async function extract(docText: string): Promise<ExtractResult> {
         return { ok: true, data: parsed, attempts: attempt, model: MODEL, usage, latency_ms };
       }
 
-      lastError = "response did not satisfy the schema"; // transient: retry
+      lastError = "response did not satisfy the schema"; // only this is retried
     } catch (err) {
-      // Terminal errors (bad request, auth, permission, not found) will not
-      // improve on retry -- fail fast. Rate limits and 5xx fall through to retry.
-      if (
-        err instanceof Anthropic.BadRequestError ||
-        err instanceof Anthropic.AuthenticationError ||
-        err instanceof Anthropic.PermissionDeniedError ||
-        err instanceof Anthropic.NotFoundError
-      ) {
-        return { ok: false, error: err.message, attempts: attempt, model: MODEL };
-      }
-      lastError = err instanceof Error ? err.message : String(err); // transient: retry
+      // Any thrown error stops here. Transient failures (429/5xx/connection) were
+      // already retried with backoff inside the SDK, so a throw means they are
+      // exhausted; terminal errors (bad request, auth, permission, not found)
+      // won't improve either. Re-issuing at this layer would multiply the SDK's
+      // attempts -- and the spend -- for no gain.
+      return { ok: false, error: err instanceof Error ? err.message : String(err), attempts: attempt, model: MODEL };
     }
   }
 
