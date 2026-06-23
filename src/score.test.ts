@@ -21,6 +21,22 @@ describe("norm", () => {
   test("the string '250' and the number 250 compare equal", () => {
     expect(norm("250")).toBe(norm(250));
   });
+
+  test("negative and fractional numbers stringify exactly", () => {
+    expect(norm(-5)).toBe("-5");
+    expect(norm(42.7)).toBe("42.7");
+    expect(norm(-0)).toBe("0"); // -0 and 0 collapse to the same key
+  });
+
+  test("a real 0 stays distinct from null (0 is a stated value, not 'missing')", () => {
+    // load-bearing for classifyField: a stated 0 must not read as 'not stated'
+    expect(norm(0)).not.toBe(norm(null));
+  });
+
+  test("NaN normalizes to 'NaN' and is not confused with null", () => {
+    expect(norm(NaN)).toBe("NaN");
+    expect(norm(NaN)).not.toBe(norm(null));
+  });
 });
 
 describe("classifyField", () => {
@@ -85,5 +101,15 @@ describe("accuracyOf", () => {
     t.correct = 59;
     t.hallucinated = 1;
     expect(accuracyOf(t)).toBeCloseTo(98.333, 2);
+  });
+
+  test("all four outcomes count toward the denominator", () => {
+    // 1 correct of 4 scored -> 25%; guards against missing/wrong being dropped from the total
+    const t = emptyTally();
+    t.correct = 1;
+    t.missing = 1;
+    t.wrong = 1;
+    t.hallucinated = 1;
+    expect(accuracyOf(t)).toBe(25);
   });
 });
