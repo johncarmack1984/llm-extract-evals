@@ -44,6 +44,11 @@ describe("InterconnectionStudy schema", () => {
     expect(parses({ in_service_date: "March 2027" })).toBe(false);
   });
 
+  test("in_service_date is checked for shape only, not calendar validity", () => {
+    // documents the deliberate looseness: an impossible-but-well-formed date passes
+    expect(parses({ in_service_date: "2027-13-45" })).toBe(true);
+  });
+
   test("enum fields reject out-of-set values", () => {
     expect(parses({ iso_rto: "TVA" })).toBe(false);
     expect(parses({ resource_type: "nuclear" })).toBe(false);
