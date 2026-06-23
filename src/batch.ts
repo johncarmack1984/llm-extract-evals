@@ -1,5 +1,5 @@
-import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { extract, MODEL, type ExtractResult } from "./extract";
 import { extractWithConfidence } from "./confidence";
 import { costUsd, type Usage } from "./pricing";
@@ -18,6 +18,9 @@ import type { InterconnectionStudy } from "./schema";
  * object per line with an `input` (or `text`) field and an optional `id`.
  */
 
+const USAGE =
+  "usage: bun run src/batch.ts <dir|file.jsonl> [--out f] [--concurrency 4] [--confidence 3] [--threshold 0.67] [--review f]";
+
 type Item = { id: string; input: string };
 type OutRecord = {
   id: string;
@@ -31,24 +34,87 @@ type OutRecord = {
   low_confidence?: string[];
 };
 
-function parseArgs(argv: string[]) {
+export type BatchArgs = {
+  path: string | undefined;
+  out: string | undefined;
+  review: string | undefined;
+  concurrency: number;
+  confidence: number;
+  threshold: number;
+};
+
+/** A positive-integer option; falls back to `dflt` when absent or unparseable. */
+function intOpt(raw: string | undefined, dflt: number): number {
+  if (raw === undefined) return dflt;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) ? Math.max(1, n) : dflt;
+}
+
+/** Confidence threshold clamped to [0,1]; falls back to 0.67 when absent or unparseable. */
+function clampThreshold(raw: string | undefined): number {
+  if (raw === undefined) return 0.67;
+  const n = Number(raw);
+  return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0.67;
+}
+
+/**
+ * Parse argv as `<path> [--flag value | --flag=value]...`. Every flag takes a
+ * value, so we scan token by token rather than in fixed pairs -- a single
+ * value-less flag (or a stray positional) is an explicit error instead of
+ * silently shifting every following option onto the wrong flag. Throws on a
+ * malformed argument; the caller turns that into a usage error.
+ */
+export function parseArgs(argv: string[]): BatchArgs {
   const [path, ...rest] = argv;
   const opts: Record<string, string> = {};
-  for (let i = 0; i < rest.length; i += 2) {
-    const key = rest[i]?.replace(/^--/, "");
-    if (key && rest[i + 1] !== undefined) opts[key] = rest[i + 1]!;
+  for (let i = 0; i < rest.length; i++) {
+    const tok = rest[i]!;
+    const m = /^--([^=]+)(?:=(.*))?$/.exec(tok);
+    if (!m) throw new Error(`unexpected argument "${tok}" (expected a --flag)`);
+    const key = m[1]!;
+    let val = m[2];
+    if (val === undefined) {
+      const next = rest[i + 1];
+      if (next === undefined || next.startsWith("--")) throw new Error(`flag --${key} needs a value`);
+      val = next;
+      i++;
+    }
+    opts[key] = val;
   }
   return {
     path,
     out: opts.out,
     review: opts.review,
-    concurrency: Math.max(1, parseInt(opts.concurrency ?? "4", 10) || 4),
-    confidence: Math.max(1, parseInt(opts.confidence ?? "1", 10) || 1),
-    threshold: parseFloat(opts.threshold ?? "0.67") || 0.67,
+    concurrency: intOpt(opts.concurrency, 4),
+    confidence: intOpt(opts.confidence, 1),
+    threshold: clampThreshold(opts.threshold),
   };
 }
 
+/**
+ * Parse JSONL text into items, skipping malformed lines instead of aborting the
+ * whole run. Returns the parsed items plus the 1-based line numbers skipped, so
+ * the caller can report them. Blank lines are ignored (not counted as skipped).
+ */
+export function parseJsonl(text: string): { items: Item[]; skipped: number[] } {
+  const items: Item[] = [];
+  const skipped: number[] = [];
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!.trim();
+    if (!line) continue;
+    try {
+      const row = JSON.parse(line);
+      items.push({ id: String(row.id ?? items.length + 1), input: String(row.input ?? row.text ?? "") });
+    } catch {
+      skipped.push(i + 1);
+    }
+  }
+  return { items, skipped };
+}
+
 function loadItems(path: string): Item[] {
+  if (!existsSync(path)) throw new Error(`no such file or directory: ${path}`);
   if (statSync(path).isDirectory()) {
     return readdirSync(path)
       .filter((f) => f.endsWith(".txt") || f.endsWith(".md"))
@@ -56,18 +122,13 @@ function loadItems(path: string): Item[] {
       .map((f) => ({ id: f, input: readFileSync(join(path, f), "utf8") }));
   }
   // JSONL: one object per line, { id?, input | text }
-  return readFileSync(path, "utf8")
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .map((line, i) => {
-      const row = JSON.parse(line);
-      return { id: String(row.id ?? i + 1), input: String(row.input ?? row.text ?? "") };
-    });
+  const { items, skipped } = parseJsonl(readFileSync(path, "utf8"));
+  if (skipped.length) console.error(`skipped ${skipped.length} malformed JSONL line(s): ${skipped.join(", ")}`);
+  return items;
 }
 
 /** Run `fn` over items with at most `limit` in flight; results stay in input order. */
-async function mapPool<T, R>(items: T[], limit: number, fn: (item: T, i: number) => Promise<R>): Promise<R[]> {
+export async function mapPool<T, R>(items: T[], limit: number, fn: (item: T, i: number) => Promise<R>): Promise<R[]> {
   const results = new Array<R>(items.length);
   let next = 0;
   const worker = async () => {
@@ -81,55 +142,81 @@ async function mapPool<T, R>(items: T[], limit: number, fn: (item: T, i: number)
   return results;
 }
 
-const args = parseArgs(process.argv.slice(2));
-if (!args.path) {
-  console.error("usage: bun run src/batch.ts <dir|file.jsonl> [--out f] [--concurrency 4] [--confidence 3] [--threshold 0.67] [--review f]");
-  process.exit(1);
+/** Write a file, creating its parent directory first so a nested --out path doesn't ENOENT. */
+function writeFileEnsuringDir(path: string, contents: string): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, contents);
 }
 
-const items = loadItems(args.path);
-console.error(`extracting ${items.length} document(s) with ${MODEL} (concurrency ${args.concurrency}` + (args.confidence > 1 ? `, confidence ${args.confidence} runs/doc` : "") + ")");
+async function main() {
+  let args: BatchArgs;
+  try {
+    args = parseArgs(process.argv.slice(2));
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : String(e));
+    console.error(USAGE);
+    process.exit(1);
+  }
+  if (!args.path) {
+    console.error(USAGE);
+    process.exit(1);
+  }
 
-const records = await mapPool(items, args.concurrency, async (item): Promise<OutRecord> => {
+  let items: Item[];
+  try {
+    items = loadItems(args.path);
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : String(e));
+    process.exit(1);
+  }
+
+  console.error(`extracting ${items.length} document(s) with ${MODEL} (concurrency ${args.concurrency}` + (args.confidence > 1 ? `, confidence ${args.confidence} runs/doc` : "") + ")");
+
+  const records = await mapPool(items, args.concurrency, async (item): Promise<OutRecord> => {
+    if (args.confidence > 1) {
+      const c = await extractWithConfidence(item.input, args.confidence, args.threshold);
+      return c.ok
+        ? { id: item.id, ok: true, model: MODEL, data: c.data, usage: c.usage, confidence: c.confidence, low_confidence: c.low_confidence }
+        : { id: item.id, ok: false, model: MODEL, error: c.error };
+    }
+    const r: ExtractResult = await extract(item.input);
+    return r.ok
+      ? { id: item.id, ok: true, model: MODEL, data: r.data, usage: r.usage, latency_ms: r.latency_ms }
+      : { id: item.id, ok: false, model: MODEL, error: r.error };
+  });
+
+  // Write results (JSONL).
+  const jsonl = records.map((r) => JSON.stringify(r)).join("\n") + "\n";
+  if (args.out) {
+    writeFileEnsuringDir(args.out, jsonl);
+    console.error(`wrote ${records.length} records to ${args.out}`);
+  } else {
+    process.stdout.write(jsonl);
+  }
+
+  // Summary: counts, cost, and the human-review queue.
+  const ok = records.filter((r) => r.ok);
+  const usage: Usage = ok.reduce(
+    (a, r) => ({ input_tokens: a.input_tokens + (r.usage?.input_tokens ?? 0), output_tokens: a.output_tokens + (r.usage?.output_tokens ?? 0) }),
+    { input_tokens: 0, output_tokens: 0 },
+  );
+  const cost = costUsd(MODEL, usage);
+  const needsReview = records.filter((r) => r.ok && r.low_confidence && r.low_confidence.length > 0);
+
+  console.error("\n=== batch summary ===");
+  console.error(`extracted:  ${ok.length}/${records.length} ok`);
+  console.error(`tokens:     ${usage.input_tokens} in / ${usage.output_tokens} out`);
+  console.error(`cost:       ${cost === null ? "unknown (no price listed for model)" : "$" + cost.toFixed(4)}`);
   if (args.confidence > 1) {
-    const c = await extractWithConfidence(item.input, args.confidence, args.threshold);
-    return c.ok
-      ? { id: item.id, ok: true, model: MODEL, data: c.data, usage: c.usage, confidence: c.confidence, low_confidence: c.low_confidence }
-      : { id: item.id, ok: false, model: MODEL, error: c.error };
+    console.error(`review:     ${needsReview.length} record(s) have low-confidence fields`);
+    for (const r of needsReview) console.error(`  ${r.id}: ${r.low_confidence!.join(", ")}`);
+    if (args.review) {
+      writeFileEnsuringDir(args.review, needsReview.map((r) => JSON.stringify(r)).join("\n") + "\n");
+      console.error(`wrote review queue (${needsReview.length}) to ${args.review}`);
+    }
   }
-  const r: ExtractResult = await extract(item.input);
-  return r.ok
-    ? { id: item.id, ok: true, model: MODEL, data: r.data, usage: r.usage, latency_ms: r.latency_ms }
-    : { id: item.id, ok: false, model: MODEL, error: r.error };
-});
-
-// Write results (JSONL).
-const jsonl = records.map((r) => JSON.stringify(r)).join("\n") + "\n";
-if (args.out) {
-  writeFileSync(args.out, jsonl);
-  console.error(`wrote ${records.length} records to ${args.out}`);
-} else {
-  process.stdout.write(jsonl);
 }
 
-// Summary: counts, cost, and the human-review queue.
-const ok = records.filter((r) => r.ok);
-const usage: Usage = ok.reduce(
-  (a, r) => ({ input_tokens: a.input_tokens + (r.usage?.input_tokens ?? 0), output_tokens: a.output_tokens + (r.usage?.output_tokens ?? 0) }),
-  { input_tokens: 0, output_tokens: 0 },
-);
-const cost = costUsd(MODEL, usage);
-const needsReview = records.filter((r) => r.ok && r.low_confidence && r.low_confidence.length > 0);
-
-console.error("\n=== batch summary ===");
-console.error(`extracted:  ${ok.length}/${records.length} ok`);
-console.error(`tokens:     ${usage.input_tokens} in / ${usage.output_tokens} out`);
-console.error(`cost:       ${cost === null ? "unknown (no price listed for model)" : "$" + cost.toFixed(4)}`);
-if (args.confidence > 1) {
-  console.error(`review:     ${needsReview.length} record(s) have low-confidence fields`);
-  for (const r of needsReview) console.error(`  ${r.id}: ${r.low_confidence!.join(", ")}`);
-  if (args.review) {
-    writeFileSync(args.review, needsReview.map((r) => JSON.stringify(r)).join("\n") + "\n");
-    console.error(`wrote review queue (${needsReview.length}) to ${args.review}`);
-  }
+if (import.meta.main) {
+  await main();
 }
