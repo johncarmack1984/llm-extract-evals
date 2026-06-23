@@ -1,0 +1,17 @@
+{
+  "input": "This cluster study covers two interconnection requests sharing a point of interconnection. Request A is Saguaro Solar, a 150 MW photovoltaic project (queue Q-880) interconnecting at the Pinal 115 kV substation in CAISO. Request B is an unrelated 90 MW standalone battery project. Saguaro Solar's facilities study is complete, with network upgrades estimated at $3,500,000.",
+  "expected": {
+    "project_name": "Saguaro Solar",
+    "developer": null,
+    "capacity_mw": 150,
+    "resource_type": "solar",
+    "voltage_kv": 115,
+    "point_of_interconnection": "Pinal 115 kV substation",
+    "queue_id": "Q-880",
+    "iso_rto": "CAISO",
+    "study_type": "facilities",
+    "in_service_date": null,
+    "status": null,
+    "network_upgrade_cost_usd": 3500000
+  }
+}

@@ -3,3 +3,7 @@ node_modules/
 dist/
 *.log
 .DS_Store
+
+# batch outputs (documented --out / --review filenames)
+results.jsonl
+review.jsonl

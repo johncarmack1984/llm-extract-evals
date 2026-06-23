@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "extract": "bun run src/run.ts",
-    "eval": "bun run src/eval.ts"
+    "eval": "bun run src/eval.ts",
+    "batch": "bun run src/batch.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",

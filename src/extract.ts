@@ -1,12 +1,15 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { InterconnectionStudy } from "./schema";
+import type { Usage } from "./pricing";
 
-const MODEL = process.env.MODEL ?? "claude-opus-4-8";
+export const MODEL = process.env.MODEL ?? "claude-opus-4-8";
 const MAX_RETRIES = 2;
 
-// Reads ANTHROPIC_API_KEY from the environment (bun auto-loads .env).
-const client = new Anthropic();
+// Reads ANTHROPIC_API_KEY from the environment (bun auto-loads .env). Lazy so
+// that replaying fixtures needs no key -- the client is only built on a live call.
+let _client: Anthropic | undefined;
+const client = () => (_client ??= new Anthropic());
 
 const SYSTEM = [
   "You extract structured data from grid interconnection documents.",
@@ -17,13 +20,21 @@ const SYSTEM = [
 ].join(" ");
 
 export type ExtractResult =
-  | { ok: true; data: InterconnectionStudy; attempts: number; model: string }
+  | {
+      ok: true;
+      data: InterconnectionStudy;
+      attempts: number;
+      model: string;
+      usage: Usage;
+      latency_ms: number;
+    }
   | { ok: false; error: string; attempts: number; model: string };
 
 /**
  * Extract one document into the schema. Structured outputs constrain the
  * response to the schema; on a schema miss we retry (transient), and a refusal
- * is terminal (a retry will not change it).
+ * is terminal (a retry will not change it). On success we also surface token
+ * usage and wall-clock latency so the eval/batch can report cost and timing.
  */
 export async function extract(docText: string): Promise<ExtractResult> {
   let lastError = "unknown error";
@@ -31,20 +42,28 @@ export async function extract(docText: string): Promise<ExtractResult> {
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const response = await client.messages.parse({
+      const started = performance.now();
+      const response = await client().messages.parse({
         model: MODEL,
         max_tokens: 2048,
         system: SYSTEM,
         messages: [{ role: "user", content: docText }],
         output_config: { format: zodOutputFormat(InterconnectionStudy) },
       });
+      const latency_ms = Math.round(performance.now() - started);
 
       if (response.stop_reason === "refusal") {
         return { ok: false, error: "model refused the request", attempts: attempt, model: MODEL };
       }
 
       const parsed = response.parsed_output;
-      if (parsed) return { ok: true, data: parsed, attempts: attempt, model: MODEL };
+      if (parsed) {
+        const usage: Usage = {
+          input_tokens: response.usage.input_tokens,
+          output_tokens: response.usage.output_tokens,
+        };
+        return { ok: true, data: parsed, attempts: attempt, model: MODEL, usage, latency_ms };
+      }
 
       lastError = "response did not satisfy the schema"; // transient: retry
     } catch (err) {
