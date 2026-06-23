@@ -33,11 +33,14 @@ export const InterconnectionStudy = z.object({
     .enum(["feasibility", "system_impact", "facilities", "other"])
     .nullable()
     .describe("Interconnection study phase."),
+  // Shape only (YYYY-MM-DD), not a calendar check -- "2027-13-45" would pass.
+  // Deliberately loose: a model extracting a stated date rarely emits an
+  // impossible one, and a stricter check would add noise for no real gain.
   in_service_date: z
     .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "ISO 8601 date, YYYY-MM-DD")
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "date must be YYYY-MM-DD")
     .nullable()
-    .describe("In-service date as ISO 8601 (YYYY-MM-DD). Use null if only a month or year is given."),
+    .describe("In-service date as YYYY-MM-DD (digits only; null if just a month or year is given)."),
   status: z
     .enum(["active", "withdrawn", "suspended", "in_service", "other"])
     .nullable()
