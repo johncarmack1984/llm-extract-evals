@@ -97,7 +97,7 @@ Anything that calls the live model needs a key:
 cp .env.example .env         # then put your Anthropic API key in .env
 bun run extract data/samples/willow-creek.txt   # extract a single document
 bun run batch data/samples --out results.jsonl  # extract a folder -> JSONL
-RUNS=5 bun run eval          # variance sweep: 5 live calls/case, reports per-field flake
+RUNS=5 bun run eval          # variance sweep: 5 runs/case (run 0 replays, rest live), per-field flake
 ```
 
 `.env` is gitignored -- never commit a key.
@@ -118,18 +118,9 @@ This extracts each document 3 times, writes consensus records to stdout (or `--o
 
 ## Credentials -- bring your own
 
-The tool ships no key of its own. It runs on whatever Anthropic account you authenticate with and spends that account's credits, so anyone who runs it pays for their own usage -- the author's account is never involved.
+The tool ships no key of its own. It calls the Anthropic Messages API through the official SDK, which authenticates with an `ANTHROPIC_API_KEY` and bills that key's account on pay-as-you-go API credits -- so anyone who runs it pays for their own usage, and the author's account is never involved. Note this is API billing, not a Claude.ai (Pro/Max) subscription.
 
-- **API key (default):** put your key in `.env` as `ANTHROPIC_API_KEY` (get one at console.anthropic.com).
-- **Log in with your Claude account (keyless):** authenticate with the Anthropic CLI, hand the session to the run, and remove `ANTHROPIC_API_KEY` from `.env` so your login is used:
-
-  ```sh
-  ant auth login
-  set -a; eval "$(ant auth print-credentials --env)"; set +a
-  bun run extract data/samples/willow-creek.txt
-  ```
-
-The Messages API this calls runs on pay-as-you-go API credits, not a Claude.ai (Pro/Max) subscription -- whichever account you authenticate with needs API credits. Replaying the eval needs no credentials at all.
+Put your key in `.env` as `ANTHROPIC_API_KEY` (get one at console.anthropic.com). Only the live paths need it -- `extract`, `batch`, and the `RECORD=1` / `RUNS>1` eval; replaying the committed fixtures needs no credentials at all.
 
 ## Model and cost
 
