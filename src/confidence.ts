@@ -55,7 +55,9 @@ export async function extractWithConfidence(
 /**
  * Per-field majority vote over a set of extracted records (pure -- no I/O, so
  * it's unit-testable). Returns the modal value per field, the agreement
- * fraction, and the fields whose agreement fell below `threshold`.
+ * fraction, and the fields whose agreement fell below `threshold`. On a tie
+ * between a stated value and "not stated", the consensus is null -- the safe
+ * default when the output feeds a human-review queue.
  */
 export function tallyConfidence(
   samples: InterconnectionStudy[],
@@ -75,7 +77,15 @@ export function tallyConfidence(
       else groups.set(norm(raw), { n: 1, raw });
     }
     let best = { n: 0, raw: null as unknown };
-    for (const g of groups.values()) if (g.n > best.n) best = g; // first-seen wins ties
+    for (const g of groups.values()) if (g.n > best.n) best = g; // first-seen wins value-vs-value ties
+
+    // Safety bias: if "not stated" (null) tied the modal count, take it over a
+    // stated value. The unsafe error for a review pipeline is trusting an
+    // invented value, so a value-vs-null deadlock defaults to null rather than
+    // to whichever run happened to come first -- and a null consensus is the
+    // literal null the schema expects, not an absent field's undefined.
+    const notStated = groups.get("null");
+    if (notStated && notStated.n === best.n && best.raw !== null) best = { n: notStated.n, raw: null };
 
     data[field] = best.raw;
     confidence[field] = best.n / samples.length;
