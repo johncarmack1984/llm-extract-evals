@@ -65,8 +65,7 @@ describe("extract", () => {
       expect(r.attempts).toBe(1);
       expect(r.data).toMatchObject({ project_name: "Granite Peak", capacity_mw: 180 });
       expect(r.usage).toEqual({ input_tokens: 10, output_tokens: 5 });
-      expect(typeof r.latency_ms).toBe("number");
-      expect(r.latency_ms).toBeGreaterThanOrEqual(0);
+      expect(Number.isFinite(r.latency_ms)).toBe(true); // present and a real number (timing itself isn't asserted under a mock)
     }
     expect(parse).toHaveBeenCalledTimes(1);
   });
