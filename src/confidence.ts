@@ -30,13 +30,14 @@ export async function extractWithConfidence(
   text: string,
   runs = 3,
   threshold = 0.67,
+  deps = { extract },
 ): Promise<ConfidenceResult> {
   const samples: InterconnectionStudy[] = [];
   const usage: Usage = { input_tokens: 0, output_tokens: 0 };
   let lastError = "no successful extraction";
 
   for (let i = 0; i < runs; i++) {
-    const r = await extract(text);
+    const r = await deps.extract(text);
     if (r.ok) {
       samples.push(r.data);
       usage.input_tokens += r.usage.input_tokens;
