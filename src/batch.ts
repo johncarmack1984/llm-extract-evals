@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { extract, MODEL, type ExtractResult } from "./extract";
+import { extract, MODEL } from "./extract";
 import { extractWithConfidence } from "./confidence";
 import { costUsd, type Usage } from "./pricing";
 import type { InterconnectionStudy } from "./schema";
@@ -148,6 +148,33 @@ function writeFileEnsuringDir(path: string, contents: string): void {
   writeFileSync(path, contents);
 }
 
+/**
+ * Extract one item into an output record. The try/catch keeps a single
+ * unexpected throw from aborting the whole batch -- extract/extractWithConfidence
+ * already return error results rather than throwing, so this is a guard, not the
+ * normal path. `deps` is injectable so the record shaping can be unit-tested.
+ */
+export async function extractItem(
+  item: Item,
+  opts: { confidence: number; threshold: number },
+  deps = { extract, extractWithConfidence },
+): Promise<OutRecord> {
+  try {
+    if (opts.confidence > 1) {
+      const c = await deps.extractWithConfidence(item.input, opts.confidence, opts.threshold);
+      return c.ok
+        ? { id: item.id, ok: true, model: MODEL, data: c.data, usage: c.usage, confidence: c.confidence, low_confidence: c.low_confidence }
+        : { id: item.id, ok: false, model: MODEL, error: c.error };
+    }
+    const r = await deps.extract(item.input);
+    return r.ok
+      ? { id: item.id, ok: true, model: MODEL, data: r.data, usage: r.usage, latency_ms: r.latency_ms }
+      : { id: item.id, ok: false, model: MODEL, error: r.error };
+  } catch (e) {
+    return { id: item.id, ok: false, model: MODEL, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 async function main() {
   let args: BatchArgs;
   try {
@@ -172,18 +199,7 @@ async function main() {
 
   console.error(`extracting ${items.length} document(s) with ${MODEL} (concurrency ${args.concurrency}` + (args.confidence > 1 ? `, confidence ${args.confidence} runs/doc` : "") + ")");
 
-  const records = await mapPool(items, args.concurrency, async (item): Promise<OutRecord> => {
-    if (args.confidence > 1) {
-      const c = await extractWithConfidence(item.input, args.confidence, args.threshold);
-      return c.ok
-        ? { id: item.id, ok: true, model: MODEL, data: c.data, usage: c.usage, confidence: c.confidence, low_confidence: c.low_confidence }
-        : { id: item.id, ok: false, model: MODEL, error: c.error };
-    }
-    const r: ExtractResult = await extract(item.input);
-    return r.ok
-      ? { id: item.id, ok: true, model: MODEL, data: r.data, usage: r.usage, latency_ms: r.latency_ms }
-      : { id: item.id, ok: false, model: MODEL, error: r.error };
-  });
+  const records = await mapPool(items, args.concurrency, (item) => extractItem(item, args));
 
   // Write results (JSONL).
   const jsonl = records.map((r) => JSON.stringify(r)).join("\n") + "\n";
