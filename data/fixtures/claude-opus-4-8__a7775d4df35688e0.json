@@ -1,0 +1,29 @@
+{
+  "model": "claude-opus-4-8",
+  "run_index": 0,
+  "input": "Prairie Wind Repower (queue J1789) is a 180 MW wind facility in MISO. A feasibility study is underway. The point of interconnection has not yet been finalized. No cost estimate is available at this stage.",
+  "result": {
+    "ok": true,
+    "data": {
+      "project_name": "Prairie Wind Repower",
+      "developer": null,
+      "capacity_mw": 180,
+      "resource_type": "wind",
+      "voltage_kv": null,
+      "point_of_interconnection": null,
+      "queue_id": "J1789",
+      "iso_rto": "MISO",
+      "study_type": "feasibility",
+      "in_service_date": null,
+      "status": "active",
+      "network_upgrade_cost_usd": null
+    },
+    "attempts": 1,
+    "model": "claude-opus-4-8",
+    "usage": {
+      "input_tokens": 166,
+      "output_tokens": 71
+    },
+    "latency_ms": 2004
+  }
+}
