@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { parseArgs, parseJsonl, mapPool } from "./batch";
+import { parseArgs, parseJsonl, mapPool, extractItem } from "./batch";
+import type { InterconnectionStudy } from "./schema";
+
+const rec = (o: Record<string, unknown>) => o as unknown as InterconnectionStudy;
 
 describe("parseArgs", () => {
   test("parses a path with --flag value pairs", () => {
@@ -102,5 +105,50 @@ describe("mapPool", () => {
       inFlight--;
     });
     expect(peak).toBeLessThanOrEqual(2);
+  });
+});
+
+// Inject fake extract functions so record shaping is tested with no network/spend.
+describe("extractItem", () => {
+  const item = { id: "doc-1", input: "text" };
+  const never = async () => {
+    throw new Error("should not be called");
+  };
+
+  test("a single-run success becomes an ok record carrying usage and latency", async () => {
+    const deps = {
+      extract: async () => ({ ok: true as const, data: rec({ project_name: "X" }), attempts: 1, model: "m", usage: { input_tokens: 10, output_tokens: 5 }, latency_ms: 42 }),
+      extractWithConfidence: never,
+    };
+    const out = await extractItem(item, { confidence: 1, threshold: 0.67 }, deps);
+    expect(out).toMatchObject({ id: "doc-1", ok: true, usage: { input_tokens: 10, output_tokens: 5 }, latency_ms: 42 });
+    expect(out.data).toMatchObject({ project_name: "X" });
+  });
+
+  test("a failed extraction becomes an error record, not a throw", async () => {
+    const deps = {
+      extract: async () => ({ ok: false as const, error: "schema miss", attempts: 3, model: "m" }),
+      extractWithConfidence: never,
+    };
+    expect(await extractItem(item, { confidence: 1, threshold: 0.67 }, deps)).toMatchObject({ id: "doc-1", ok: false, error: "schema miss" });
+  });
+
+  test("an unexpected throw is caught as an error record so one bad doc can't abort the batch", async () => {
+    const deps = {
+      extract: async () => {
+        throw new Error("kaboom");
+      },
+      extractWithConfidence: never,
+    };
+    expect(await extractItem(item, { confidence: 1, threshold: 0.67 }, deps)).toMatchObject({ id: "doc-1", ok: false, error: "kaboom" });
+  });
+
+  test("confidence>1 routes through the vote and carries the confidence fields", async () => {
+    const deps = {
+      extract: never,
+      extractWithConfidence: async () => ({ ok: true as const, data: rec({ project_name: "X" }), confidence: { project_name: 1 }, low_confidence: ["capacity_mw"], runs: 3, ok_runs: 3, usage: { input_tokens: 30, output_tokens: 15 } }),
+    };
+    const out = await extractItem(item, { confidence: 3, threshold: 0.67 }, deps);
+    expect(out).toMatchObject({ id: "doc-1", ok: true, confidence: { project_name: 1 }, low_confidence: ["capacity_mw"] });
   });
 });
