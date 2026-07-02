@@ -1,6 +1,6 @@
 # llm-extract-evals
 
-Schema-validated extraction of structured data from grid interconnection documents, with an eval harness around it. A focused demonstration of the parts of production LLM work that matter: **structured outputs, retries, evals with a failure taxonomy, deterministic offline replay, cost/latency accounting, and confidence-gated human review** -- not a one-off "call the API and hope" script.
+Schema-validated extraction of structured data from grid interconnection documents, with an eval harness around it. A focused demonstration of the parts of production LLM work that matter: structured outputs, retries, evals with a failure taxonomy, deterministic offline replay, cost/latency accounting, and confidence-gated human review -- not a one-off "call the API and hope" script.
 
 Built with the Anthropic SDK (Claude). Energy/grid is the worked example; the technique is domain-agnostic.
 
@@ -10,7 +10,7 @@ Built with the Anthropic SDK (Claude). Energy/grid is the worked example; the te
 2. **Eval** (`src/eval.ts`) -- runs extraction over a set of gold-labeled cases (`data/cases/`) and scores it: field-level accuracy, schema-valid rate, a per-field breakdown, a failure taxonomy, and token/cost/latency totals. Runs **deterministically offline** by replaying recorded fixtures (no key, no spend), with an optional `RUNS=N` mode that measures run-to-run variance.
 3. **Batch** (`src/batch.ts`) -- extracts over a folder of documents or a JSONL file with bounded concurrency, emits one JSON record per input, and (with `--confidence`) routes low-confidence fields to a human-review queue.
 
-The design choice that matters: a field is `null` only when the document does not state it. The eval rewards leaving unknowns blank and penalizes invention -- the failure mode that makes naive extraction unsafe to ship.
+The design choice that matters: a field is `null` only when the document doesn't state it. The eval rewards leaving unknowns blank and penalizes invention -- the failure mode that makes naive extraction unsafe to ship.
 
 ## Failure taxonomy
 
