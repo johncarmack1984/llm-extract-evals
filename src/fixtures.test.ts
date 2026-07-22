@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { cachedExtract, fixtureKey, fixturePath, FIXTURES_DIR } from "./fixtures";
+import { MODEL } from "./extract";
 
 // fixtureKey is the cache key the whole offline replay path depends on
 // (cachedExtract does existsSync(fixturePath(...))). If its derivation drifts,
@@ -81,7 +82,12 @@ describe("cachedExtract REPLAY_ONLY guard", () => {
 describe("cachedExtract replay", () => {
   // Exercise the CI-critical offline path against a real committed fixture: with
   // RECORD off and no key, a present fixture must replay -- never call the model.
-  const fixtureFile = readdirSync(FIXTURES_DIR).find((f) => f.endsWith(".json"))!;
+  // Pick a fixture recorded for the CURRENT MODEL: the dir holds several models'
+  // fixtures, and cachedExtract keys on MODEL -- a fixture from another model
+  // (same input) would replay that model's recording and fail the verbatim check.
+  const fixtureFile = readdirSync(FIXTURES_DIR)
+    .filter((f) => f.endsWith(".json"))
+    .find((f) => (JSON.parse(readFileSync(join(FIXTURES_DIR, f), "utf8")) as { model: string }).model === MODEL)!;
   const fx = JSON.parse(readFileSync(join(FIXTURES_DIR, fixtureFile), "utf8"));
 
   test("a committed fixture replays offline and returns the recorded result verbatim", async () => {

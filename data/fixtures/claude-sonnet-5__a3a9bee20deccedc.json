@@ -1,5 +1,5 @@
 {
-  "model": "claude-opus-4-8",
+  "model": "claude-sonnet-5",
   "run_index": 0,
   "input": "Mojave Storage Center is a 400 MW standalone battery energy storage system developed by Sunridge Power. It interconnects at the Kramer 230 kV substation in CAISO under queue Q2231. The facilities study is complete, with network upgrade costs estimated at $42.7 million. Target commercial operation is 2026-12-15. Status: suspended pending affected-system review.",
   "result": {
@@ -19,11 +19,11 @@
       "network_upgrade_cost_usd": 42700000
     },
     "attempts": 1,
-    "model": "claude-opus-4-8",
+    "model": "claude-sonnet-5",
     "usage": {
       "input_tokens": 2110,
-      "output_tokens": 151
+      "output_tokens": 152
     },
-    "latency_ms": 2759
+    "latency_ms": 3629
   }
 }

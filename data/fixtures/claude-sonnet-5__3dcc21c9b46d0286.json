@@ -1,5 +1,5 @@
 {
-  "model": "claude-opus-4-8",
+  "model": "claude-sonnet-5",
   "run_index": 0,
   "input": "Blue Mesa Hybrid is a 350 MW co-located solar-plus-storage project in PJM, interconnecting at the Mt. Storm 500 kV switchyard under queue AF1-204. Network upgrades are estimated at $128.5 million, of which the customer's cost allocation is 65%. Commercial operation is targeted for Q3 2027.",
   "result": {
@@ -19,11 +19,11 @@
       "network_upgrade_cost_usd": 128500000
     },
     "attempts": 1,
-    "model": "claude-opus-4-8",
+    "model": "claude-sonnet-5",
     "usage": {
       "input_tokens": 2104,
-      "output_tokens": 146
+      "output_tokens": 246
     },
-    "latency_ms": 2702
+    "latency_ms": 4963
   }
 }

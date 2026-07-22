@@ -1,13 +1,16 @@
 /**
  * Per-model token pricing in USD per 1,000,000 tokens, as (input, output).
- * Source: Anthropic published pricing, current as of 2026-06. Update if rates
- * change -- an unknown model yields a null cost (reported, not guessed).
+ * Source: Anthropic published pricing, current as of 2026-07 (standard rates;
+ * Sonnet 5's introductory $2/$10 through 2026-08-31 is not reflected here so
+ * the number stays durable). Update if rates change -- an unknown model yields
+ * a null cost (reported, not guessed).
  */
 export const PRICING: Record<string, { input: number; output: number }> = {
   "claude-fable-5": { input: 10, output: 50 },
   "claude-opus-4-8": { input: 5, output: 25 },
   "claude-opus-4-7": { input: 5, output: 25 },
   "claude-opus-4-6": { input: 5, output: 25 },
+  "claude-sonnet-5": { input: 3, output: 15 },
   "claude-sonnet-4-6": { input: 3, output: 15 },
   "claude-haiku-4-5": { input: 1, output: 5 },
 };
