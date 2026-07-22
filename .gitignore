@@ -7,3 +7,8 @@ dist/
 # batch outputs (documented --out / --review filenames)
 results.jsonl
 review.jsonl
+
+# Local Claude Code config
+CLAUDE.md
+CLAUDE.local.md
+.claude/
