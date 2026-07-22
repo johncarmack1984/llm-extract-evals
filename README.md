@@ -25,7 +25,19 @@ The scorer classifies every labeled field into one of four outcomes, because "ac
 
 `schema_invalid` is tracked separately: a case whose response never satisfied the schema after retries. The pure scoring logic lives in `src/score.ts` and is unit-tested directly (`src/score.test.ts`) -- the eval methodology is itself covered by tests.
 
-## Example run
+## Measured results
+
+Three current Claude models over the nine gold cases, recorded live (`RECORD=1 bun run eval` per model) and committed as fixtures. Every number below is reproducible offline from those fixtures -- no key, no spend, identical each run.
+
+| Model              | Schema-valid | Field accuracy   | Failure taxonomy        | Cost (9 docs) | Latency (mean) |
+| ------------------ | ------------ | ---------------- | ----------------------- | ------------- | -------------- |
+| `claude-opus-4-8`  | 9/9          | 98.1% (106/108)  | hallucinated 2          | $0.1262       | 3328 ms        |
+| `claude-sonnet-5`  | 9/9          | 99.1% (107/108)  | hallucinated 1          | $0.0823       | 5243 ms        |
+| `claude-haiku-4-5` | 9/9          | 93.5% (101/108)  | wrong 6, hallucinated 1 | $0.0202       | 2409 ms        |
+
+The single accuracy number ranks these Sonnet > Opus > Haiku. The taxonomy tells a different story, and it is the whole point: **the more accurate models fail in the more dangerous way.** Every one of Opus's and Sonnet's misses is a *hallucinated* `status` -- the model inferring `active` from queue narrative on the two cases (`02`, `08`) that state no status at all. Haiku scores lowest overall, yet it never once hallucinated a status (100% on that field); most of its misses are *wrong* transcriptions -- dropping the voltage qualifier from a substation name (`Kramer substation` for `Kramer 230 kV substation`). A pipeline that can absorb a slightly-off string but not an invented status would rank these models in the opposite order from their accuracy.
+
+A real run (Opus, replayed from its fixture):
 
 ```
 ok 01-lone-star-solar
@@ -33,10 +45,10 @@ ok 01-lone-star-solar
 ok 03-mojave-storage
 ok 04-keystone-peaker
 ok 05-desert-bloom
-~  06-cedar-ridge-wind: network_upgrade_cost_usd=wrong (got 5000000, want 7200000)
+ok 06-cedar-ridge-wind
 ok 07-saguaro-solar
 ~  08-tumbleweed-storage: status=hallucinated (got "active", want null)
-~  09-blue-mesa-hybrid: network_upgrade_cost_usd=missing (got null, want 128500000)
+ok 09-blue-mesa-hybrid
 
 (replaying fixtures -- offline, no API calls; usage/latency are recorded values)
 
@@ -44,24 +56,23 @@ ok 07-saguaro-solar
 model:            claude-opus-4-8
 cases:            9
 schema-valid:     9/9
-field accuracy:   96.3%  (104/108)
-failure taxonomy: missing=1 wrong=1 hallucinated=2 schema_invalid=0
+field accuracy:   98.1%  (106/108)
+failure taxonomy: missing=0 wrong=0 hallucinated=2 schema_invalid=0
 
 per-field accuracy (worst first):
   status                      78%  (hallucinated=2)
-  network_upgrade_cost_usd    78%  (missing=1 wrong=1)
   project_name               100%
   ... (remaining fields 100%)
 
 cost + latency:
-  tokens:         1723 in / 690 out
-  cost:           $0.0259 over 9 extractions
-  latency:        mean 2105ms, max 2172ms
+  tokens:         18870 in / 1272 out
+  cost:           $0.1262 over 9 extractions
+  latency:        mean 3328ms, max 6836ms
 ```
 
-The per-field breakdown is the useful view: it pins the weakness to two fields -- `status` (over-inferred from queue narrative) and `network_upgrade_cost_usd` (confused by superseded figures and cost-allocation percentages) -- rather than reporting a single opaque accuracy number.
+The per-field breakdown is the useful view: it pins the weakness to a single field, `status` (over-inferred from queue narrative), instead of reporting one opaque accuracy number. Cost here is dominated by the input -- the system prompt plus the compiled output schema ride along on every call (~2.1k input tokens/doc for Opus and Sonnet) -- not by the small JSON record each extraction returns.
 
-> **The committed fixtures are illustrative.** The four surfaced failures are hand-authored to exercise each taxonomy outcome on the trap it pairs with (see `data/fixtures/README.md`); the `96.3%` is therefore a property of the demo fixtures, not a measured model score. Run `RECORD=1 bun run eval` to score the real model.
+> **Nine hand-authored cases is a demonstration set, not a leaderboard** -- small enough that a single case moves accuracy by ~0.9 points, and on this set the live models never even exercised the `missing` bucket (that classification is covered directly by `src/score.test.ts`). What makes it honest is that it is *reproducible*: every number is recorded, not asserted, and replays from the committed fixtures with no key and no spend. Re-record against your own key, or point the harness at a larger labeled set of your own.
 
 ## Deterministic, offline, and tested
 
@@ -78,7 +89,7 @@ The eval is non-deterministic and costs money if it calls the model every run --
 
 - **06** -- a current cost estimate alongside a *superseded* earlier figure, and a distractor count ("three contingency scenarios"); the label takes the current cost.
 - **07** -- a cluster study describing **two** projects with a shared interconnection point; the label extracts the named subject and ignores the neighbor's capacity.
-- **08** -- inference bait: an agreement "not yet executed" and a study "in progress" tempt a `status: active`, but the label leaves `status` null because no explicit status is stated.
+- **08** -- inference bait: an agreement "not yet executed" and a study "in progress" tempt a `status: active`, but the label leaves `status` null because no explicit status is stated. In the measured run above, Opus and Sonnet both fall for it.
 - **09** -- a total upgrade cost paired with a "65% cost allocation" percentage and a quarter-granularity date; the label takes the full cost and leaves `in_service_date` null.
 
 ## Run it
@@ -132,11 +143,11 @@ MODEL=claude-haiku-4-5 RECORD=1 bun run eval   # record real Haiku responses
 MODEL=claude-haiku-4-5 bun run eval            # then replay them offline
 ```
 
-Fixtures are keyed by model, so each model keeps its own set. The eval and batch summaries price token usage from `src/pricing.ts` (per-model rates, current as of 2026-06); an unknown model reports `unknown` rather than guessing. Output is a small JSON record per document, so token cost is dominated by the input; structured outputs add a one-time schema-compilation cost cached for subsequent calls.
+Fixtures are keyed by model, so each model keeps its own set. The eval and batch summaries price token usage from `src/pricing.ts` (per-model rates, current as of 2026-07); an unknown model reports `unknown` rather than guessing. Output is a small JSON record per document, so token cost is dominated by the input; structured outputs add a one-time schema-compilation cost cached for subsequent calls.
 
 ## Scope and honesty
 
-This is a portfolio demonstration. The cases in `data/cases/` are synthetic but realistic (no proprietary or scraped data), and the committed fixtures in `data/fixtures/` are illustrative stand-ins, not live recordings (see that directory's README). The point is the technique: schema-constrained extraction, retry/validation, an eval methodology with a failure taxonomy, deterministic replay, cost accounting, and confidence-gated review. A production deployment would add a larger human-labeled set, prompt iteration measured against it, and persistence/observability around the batch path.
+This is a portfolio demonstration. The cases in `data/cases/` are synthetic but realistic (no proprietary or scraped data); the committed fixtures in `data/fixtures/` are real recorded model responses for three models (Opus 4.8, Sonnet 5, Haiku 4.5), captured with `RECORD=1` and replayed offline for reproducibility (see that directory's README). The point is the technique: schema-constrained extraction, retry/validation, an eval methodology with a failure taxonomy, deterministic replay, cost accounting, and confidence-gated review. A production deployment would add a larger human-labeled set, prompt iteration measured against it, and persistence/observability around the batch path.
 
 ## Layout
 
@@ -153,8 +164,7 @@ src/confidence.test.ts  unit tests for the confidence vote
 src/batch.ts        extract a folder/JSONL with concurrency; emit JSONL + review queue
 src/run.ts          extract a single file from the CLI
 data/cases/         gold-labeled examples ({ input, expected })
-data/fixtures/      recorded responses for offline replay (illustrative)
+data/fixtures/      recorded model responses (opus/sonnet/haiku) for offline replay
 data/samples/       sample documents for the batch/extract commands
-scripts/            generator for the illustrative fixtures
 .github/workflows/  CI: typecheck + tests + replayed eval
 ```

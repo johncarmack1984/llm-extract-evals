@@ -1,5 +1,5 @@
 {
-  "model": "claude-opus-4-8",
+  "model": "claude-sonnet-5",
   "run_index": 0,
   "input": "Tumbleweed Storage (ERCOT queue 25INR-0099) is a 320 MW battery energy storage system. The interconnection agreement has not yet been executed, and no in-service date has been set. The developer requested confidentiality, so its name is withheld. A system impact study is currently in progress.",
   "result": {
@@ -19,11 +19,11 @@
       "network_upgrade_cost_usd": null
     },
     "attempts": 1,
-    "model": "claude-opus-4-8",
+    "model": "claude-sonnet-5",
     "usage": {
       "input_tokens": 2082,
-      "output_tokens": 131
+      "output_tokens": 132
     },
-    "latency_ms": 2546
+    "latency_ms": 3920
   }
 }

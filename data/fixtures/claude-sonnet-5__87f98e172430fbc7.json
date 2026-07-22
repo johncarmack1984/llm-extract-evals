@@ -1,5 +1,5 @@
 {
-  "model": "claude-opus-4-8",
+  "model": "claude-sonnet-5",
   "run_index": 0,
   "input": "Lone Star Solar I is a 250 MW photovoltaic project developed by Permian Renewables LLC, interconnecting at the Big Spring 345 kV substation in ERCOT. Queue number 24INR-0421. A system impact study was completed; estimated network upgrades total $18,400,000. The requested in-service date is June 1, 2027. The project is active in the queue.",
   "result": {
@@ -19,11 +19,11 @@
       "network_upgrade_cost_usd": 18400000
     },
     "attempts": 1,
-    "model": "claude-opus-4-8",
+    "model": "claude-sonnet-5",
     "usage": {
       "input_tokens": 2109,
-      "output_tokens": 157
+      "output_tokens": 158
     },
-    "latency_ms": 6836
+    "latency_ms": 9942
   }
 }
